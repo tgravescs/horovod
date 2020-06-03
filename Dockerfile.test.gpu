@@ -1,21 +1,24 @@
-ARG CUDA_DOCKER_VERSION=10.0-devel-ubuntu16.04
+ARG CUDA_DOCKER_VERSION=10.1-devel-ubuntu18.04
 FROM nvidia/cuda:${CUDA_DOCKER_VERSION}
 
 # Arguments for the build. CUDA_DOCKER_VERSION needs to be repeated because
 # the first usage only applies to the FROM tag.
-ARG CUDA_DOCKER_VERSION=10.0-devel-ubuntu16.04
-ARG CUDNN_VERSION=7.6.0.64-1+cuda10.0
-ARG NCCL_VERSION_OVERRIDE=2.4.7-1+cuda10.0
+ARG CUDA_DOCKER_VERSION=10.0-devel-ubuntu18.04
+ARG CUDNN_VERSION=7.6.0.64-1+cuda10.1
+ARG NCCL_VERSION_OVERRIDE=2.4.7-1+cuda10.1
 ARG MPI_KIND=OpenMPI
-ARG PYTHON_VERSION=3.6
-ARG TENSORFLOW_PACKAGE=tensorflow-gpu==1.14.0
-ARG KERAS_PACKAGE=keras==2.2.4
-ARG PYTORCH_PACKAGE=torch==1.2.0
-ARG TORCHVISION_PACKAGE=torchvision==0.4.0
-ARG MXNET_PACKAGE=mxnet-cu100==1.5.0
-ARG PYSPARK_PACKAGE=pyspark==2.4.0
+ARG PYTHON_VERSION=3.8
+ARG TENSORFLOW_PACKAGE=tensorflow-gpu==2.2.0
+ARG KERAS_PACKAGE=keras==2.3.1
+ARG PYTORCH_PACKAGE=torch==1.5.0
+ARG TORCHVISION_PACKAGE=torchvision==0.5.0
+ARG MXNET_PACKAGE=mxnet-cu101==1.5.0
+#ARG PYSPARK_PACKAGE=pyspark==3.0.0.dev2
+ARG PYSPARK_PACKAGE=
 # if SPARK_PACKAGE is set, installs pyspark from tgz archive
-ARG SPARK_PACKAGE=
+#ARG SPARK_PACKAGE=spark-3.0.0-preview2/spark-3.0.0-preview2-bin-hadoop3.2.tgz
+ARG SPARK_PACKAGE=spark-3.0.1-20200601.050054-41-bin-hadoop3.tar.gz
+#ARG SPARK_PACKAGE=
 ARG HOROVOD_BUILD_FLAGS="HOROVOD_GPU_OPERATIONS=NCCL"
 ARG HOROVOD_MIXED_INSTALL=0
 
@@ -52,8 +55,8 @@ RUN if [[ -z "${SPARK_PACKAGE}" ]]; then \
         pip install ${PYSPARK_PACKAGE}; \
     else \
         pip install pypandoc; \
-        wget --progress=dot:giga https://archive.apache.org/dist/spark/${SPARK_PACKAGE} -O - | tar -xzC /tmp; \
-        archive=$(basename "${SPARK_PACKAGE}") bash -c "mv -v /tmp/\${archive/%.tgz/} /spark"; \
+        wget --progress=dot:giga https://gpuwa.nvidia.com/artifactory/sw-spark-maven-local/org/apache/spark/3.0.1-SNAPSHOT/${SPARK_PACKAGE} -O - | tar -xzC /tmp; \
+        archive=$(basename "${SPARK_PACKAGE}") bash -c "mv -v /tmp/spark-3.0.1-SNAPSHOT-bin-hadoop3 /spark"; \
         (cd /spark/python && python setup.py sdist && pip install dist/pyspark-*.tar.gz && rm dist/pyspark-*); \
     fi
 
@@ -113,10 +116,13 @@ RUN ldconfig /usr/local/cuda/targets/x86_64-linux/lib/stubs && \
     bash -c "${HOROVOD_BUILD_FLAGS} HOROVOD_WITH_TENSORFLOW=1 HOROVOD_WITH_PYTORCH=1 HOROVOD_WITH_MXNET=1 pip install -v $(ls /horovod/dist/horovod-*.tar.gz)[spark]" && \
     ldconfig
 
+
 # Hack for compatibility of MNIST example with TensorFlow 1.1.0.
 RUN if [[ ${TENSORFLOW_PACKAGE} == "tensorflow-gpu==1.1.0" ]]; then \
         sed -i "s/from tensorflow import keras/from tensorflow.contrib import keras/" /horovod/examples/tensorflow_mnist.py; \
     fi
+
+#RUN pip install pyarrow==0.16.0
 
 # Prefetch Spark MNIST dataset.
 RUN mkdir -p /work

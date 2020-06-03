@@ -17,6 +17,7 @@
 import argparse
 import datetime
 import os
+import time
 from distutils.version import LooseVersion
 
 import pyspark.sql.types as T
@@ -24,103 +25,30 @@ import pyspark.sql.functions as F
 from pyspark import SparkConf, Row
 from pyspark.sql import SparkSession
 
-import tensorflow as tf
-import tensorflow.keras.backend as K
-from tensorflow.keras.layers import Input, Embedding, Concatenate, Dense, Flatten, Reshape, BatchNormalization, Dropout
-
-import horovod.spark.keras as hvd
-from horovod.spark.common.store import Store
-
-parser = argparse.ArgumentParser(description='Keras Spark Rossmann Estimator Example',
-                                 formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--master',
-                    help='spark cluster to use for training. If set to None, uses current default cluster. Cluster'
-                         'should be set up to provide a Spark task per multiple CPU cores, or per GPU, e.g. by'
-                         'supplying `-c <NUM_GPUS>` in Spark Standalone mode')
-parser.add_argument('--num-proc', type=int,
-                    help='number of worker processes for training, default: `spark.default.parallelism`')
-parser.add_argument('--learning_rate', type=float, default=0.0001,
-                    help='initial learning rate')
-parser.add_argument('--batch-size', type=int, default=100,
-                    help='batch size')
-parser.add_argument('--epochs', type=int, default=100,
-                    help='number of epochs to train')
-parser.add_argument('--sample-rate', type=float,
-                    help='desired sampling rate. Useful to set to low number (e.g. 0.01) to make sure that '
-                         'end-to-end process works')
-parser.add_argument('--data-dir', default='file://' + os.getcwd(),
-                    help='location of data on local filesystem (prefixed with file://) or on HDFS')
-parser.add_argument('--local-submission-csv', default='submission.csv',
-                    help='output submission predictions CSV')
-parser.add_argument('--local-checkpoint-file', default='checkpoint',
-                    help='model checkpoint')
-parser.add_argument('--work-dir', default='/tmp',
-                    help='temporary working directory to write intermediate files (prefix with hdfs:// to use HDFS)')
 
 if __name__ == '__main__':
-    args = parser.parse_args()
 
     # ================ #
     # DATA PREPARATION #
     # ================ #
 
-    # Location of discovery script on local filesystem.
-    DISCOVERY_SCRIPT = 'get_gpu_resources.sh'
-
     print('================')
     print('Data preparation')
     print('================')
 
-    def set_gpu_conf(conf):
-        # This config will change depending on your cluster setup.
-        #
-        # 1. Standalone Cluster
-        # - Must configure spark.worker.* configs as below.
-        #
-        # 2. YARN
-        # - Requires YARN 3.1 or higher to support GPUs
-        # - Cluster should be configured to have isolation on so that
-        #   multiple executors don’t see the same GPU on the same host.
-        # - If you don’t have isolation then you would require a different discovery script
-        #   or other way to make sure that 2 executors don’t try to use same GPU.
-        #
-        # 3. Kubernetes
-        # - Requires GPU support and isolation.
-        # - Add conf.set(“spark.executor.resource.gpu.discoveryScript”, DISCOVERY_SCRIPT)
-        # - Add conf.set(“spark.executor.resource.gpu.vendor”, “nvidia.com”)
-        conf = conf.set("spark.test.home", os.environ.get('SPARK_HOME'))
-        conf = conf.set("spark.worker.resource.gpu.discoveryScript", DISCOVERY_SCRIPT)
-        conf = conf.set("spark.worker.resource.gpu.amount", 2)
-        conf = conf.set("spark.task.resource.gpu.amount", "1")
-        conf = conf.set("spark.executor.resource.gpu.amount", "1")
-        return conf
-
-
     # Create Spark session for data preparation.
-    conf = SparkConf().setAppName('Keras Spark Rossmann Estimator Example').set('spark.sql.shuffle.partitions', '16')
-    if args.master:
-        conf.setMaster(args.master)
-        conf.set("spark.submit.deployMode", "cluster")
-        conf.set("spark.yarn.appMasterEnv.YARN_CONTAINER_RUNTIME_TYPE", "docker")
-        conf.set("spark.executorEnv.YARN_CONTAINER_RUNTIME_TYPE", "docker")
-        conf.set("spark.yarn.appMasterEnv.YARN_CONTAINER_RUNTIME_DOCKER_IMAGE", "quay.io/nvidia/spark:horovodtgravesspark3gpu")
-        conf.set("spark.executorEnv.YARN_CONTAINER_RUNTIME_DOCKER_IMAGE", "quay.io/nvidia/spark:horovodtgravesspark3gpu")
-        conf.set("spark.executor.instances", 2)
-        conf.set("spark.cores.max", 2)
-        conf.set("spark.executor.cores", 1)
-    elif args.num_proc:
-        conf.setMaster('local[{}]'.format(args.num_proc))
-    conf = set_gpu_conf(conf)
+    conf = SparkConf().setAppName('Keras Spark Rossmann Estimator Example').set('spark.sql.shuffle.partitions', '6')
     spark = SparkSession.builder.config(conf=conf).getOrCreate()
 
-    train_csv = spark.read.csv('%s/train.csv' % args.data_dir, header=True)
-    test_csv = spark.read.csv('%s/test.csv' % args.data_dir, header=True)
+    data_dir = "hdfs:///user/tgraves/rossmann/"
+    train_csv = spark.read.csv('%s/train.csv' % data_dir, header=True)
+    test_csv = spark.read.csv('%s/test.csv' % data_dir, header=True)
 
-    store_csv = spark.read.csv('%s/store.csv' % args.data_dir, header=True)
-    store_states_csv = spark.read.csv('%s/store_states.csv' % args.data_dir, header=True)
-    state_names_csv = spark.read.csv('%s/state_names.csv' % args.data_dir, header=True)
-    google_trend_csv = spark.read.csv('%s/googletrend.csv' % args.data_dir, header=True)
-    weather_csv = spark.read.csv('%s/weather.csv' % args.data_dir, header=True)
+    store_csv = spark.read.csv('%s/store.csv' % data_dir, header=True)
+    store_states_csv = spark.read.csv('%s/store_states.csv' % data_dir, header=True)
+    state_names_csv = spark.read.csv('%s/state_names.csv' % data_dir, header=True)
+    google_trend_csv = spark.read.csv('%s/googletrend.csv' % data_dir, header=True)
+    weather_csv = spark.read.csv('%s/weather.csv' % data_dir, header=True)
 
 
     def expand_date(df):
@@ -258,10 +186,6 @@ if __name__ == '__main__':
         return df
 
 
-    if args.sample_rate:
-        train_csv = train_csv.sample(withReplacement=False, fraction=args.sample_rate)
-        test_csv = test_csv.sample(withReplacement=False, fraction=args.sample_rate)
-
     # Prepare data frames from CSV files.
     train_df = prepare_df(train_csv).cache()
     test_df = prepare_df(test_csv).cache()
@@ -306,6 +230,7 @@ if __name__ == '__main__':
     train_df = train_df.select(*(all_cols + ['Sales', 'Date'])).cache()
     test_df = test_df.select(*(all_cols + ['Id', 'Date'])).cache()
 
+
     # Build vocabulary of categorical columns.
     vocab = build_vocabulary(train_df.select(*categorical_cols)
                              .unionAll(test_df.select(*categorical_cols)).cache(),
@@ -334,7 +259,7 @@ if __name__ == '__main__':
     print('===================================')
     print('Data frame with transformed columns')
     print('===================================')
-    train_df.show()
+    #train_df.show()
 
     print('================')
     print('Data frame sizes')
@@ -346,109 +271,13 @@ if __name__ == '__main__':
     print('Validation: %d' % val_rows)
     print('Test: %d' % test_rows)
 
-    # ============== #
-    # MODEL TRAINING #
-    # ============== #
-
-    print('==============')
-    print('Model training')
-    print('==============')
+    #print('Tom 2 schema')
+    #train_df.show()
+    #print('Tom 3 schema')
+    #test_df.show()
 
 
-    def exp_rmspe(y_true, y_pred):
-        """Competition evaluation metric, expects logarithic inputs."""
-        pct = tf.square((tf.exp(y_true) - tf.exp(y_pred)) / tf.exp(y_true))
-        # Compute mean excluding stores with zero denominator.
-        x = tf.reduce_sum(tf.where(y_true > 0.001, pct, tf.zeros_like(pct)))
-        y = tf.reduce_sum(tf.where(y_true > 0.001, tf.ones_like(pct), tf.zeros_like(pct)))
-        return tf.sqrt(x / y)
-
-
-    def act_sigmoid_scaled(x):
-        """Sigmoid scaled to logarithm of maximum sales scaled by 20%."""
-        return tf.nn.sigmoid(x) * tf.math.log(max_sales) * 1.2
-
-
-    CUSTOM_OBJECTS = {'exp_rmspe': exp_rmspe,
-                      'act_sigmoid_scaled': act_sigmoid_scaled}
-
-    #from pyspark import TaskContext
-    #config = tf.ConfigProto()
-    #config.gpu_options.visible_device_list = TaskContext.get().resources()['gpu'].addresses[0]
-    #ctx = TaskContext()
-    # print("Setting GPU devices list to : %s" % TaskContext.get().resources()['gpu'].addresses[0])
-    #print("GPU devices all %s" % ctx.resources()['gpu'].addresses)
-    #tf.config.set_visible_devices(ctx.resources()['gpu'].addresses, 'GPU')
-
-    #K.set_session(tf.Session(config=config))
-
-    # Disable GPUs when building the model to prevent memory leaks
-    if LooseVersion(tf.__version__) >= LooseVersion('2.0.0'):
-        # See https://github.com/tensorflow/tensorflow/issues/33168
-        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-        tf.config.experimental.set_visible_devices([], 'GPU')
-    else:
-        K.set_session(tf.Session(config=tf.ConfigProto(device_count={'GPU': 0})))
-
-    # Build the model.
-    inputs = {col: Input(shape=(1,), name=col) for col in all_cols}
-    embeddings = [Embedding(len(vocab[col]), 10, input_length=1, name='emb_' + col)(inputs[col])
-                  for col in categorical_cols]
-    continuous_bn = Concatenate()([Reshape((1, 1), name='reshape_' + col)(inputs[col])
-                                   for col in continuous_cols])
-    continuous_bn = BatchNormalization()(continuous_bn)
-    x = Concatenate()(embeddings + [continuous_bn])
-    x = Flatten()(x)
-    x = Dense(1000, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.00005))(x)
-    x = Dense(1000, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.00005))(x)
-    x = Dense(1000, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.00005))(x)
-    x = Dense(500, activation='relu', kernel_regularizer=tf.keras.regularizers.l2(0.00005))(x)
-    x = Dropout(0.5)(x)
-    output = Dense(1, activation=act_sigmoid_scaled)(x)
-    model = tf.keras.Model([inputs[f] for f in all_cols], output)
-    model.summary()
-
-    opt = tf.keras.optimizers.Adam(lr=args.learning_rate, epsilon=1e-3)
-
-    # Horovod: run training.
-    store = Store.create(args.work_dir)
-    keras_estimator = hvd.KerasEstimator(num_proc=args.num_proc,
-                                         store=store,
-                                         model=model,
-                                         optimizer=opt,
-                                         loss='mae',
-                                         metrics=[exp_rmspe],
-                                         custom_objects=CUSTOM_OBJECTS,
-                                         feature_cols=all_cols,
-                                         label_cols=['Sales'],
-                                         validation='Validation',
-                                         batch_size=args.batch_size,
-                                         epochs=args.epochs,
-                                         verbose=2)
-
-    keras_model = keras_estimator.fit(train_df).setOutputCols(['Sales'])
-
-    history = keras_model.getHistory()
-    best_val_rmspe = min(history['val_exp_rmspe'])
-    print('Best RMSPE: %f' % best_val_rmspe)
-
-    # Save the trained model.
-    keras_model.save(args.local_checkpoint_file)
-    print('Written checkpoint to %s' % args.local_checkpoint_file)
-
-    # ================ #
-    # FINAL PREDICTION #
-    # ================ #
-
-    print('================')
-    print('Final prediction')
-    print('================')
-
-    pred_df = keras_model.transform(test_df)
-    # Convert from log domain to real Sales numbers
-    pred_df = pred_df.withColumn('Sales', F.exp(pred_df.Sales))
-    submission_df = pred_df.select(pred_df.Id.cast(T.IntegerType()), pred_df.Sales).toPandas()
-    submission_df.sort_values(by=['Id']).to_csv(args.local_submission_csv, index=False)
-    print('Saved predictions to %s' % args.local_submission_csv)
+    train_df.write.mode("overwrite").parquet("hdfs:///user/tgraves/horovodtrainout")
+    test_df.write.mode("overwrite").parquet("hdfs:///user/tgraves/horovodtestout")
 
     spark.stop()

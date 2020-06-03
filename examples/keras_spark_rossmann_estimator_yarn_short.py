@@ -98,29 +98,29 @@ if __name__ == '__main__':
 
     # Create Spark session for data preparation.
     conf = SparkConf().setAppName('Keras Spark Rossmann Estimator Example').set('spark.sql.shuffle.partitions', '16')
-    if args.master:
-        conf.setMaster(args.master)
-        conf.set("spark.submit.deployMode", "cluster")
-        conf.set("spark.yarn.appMasterEnv.YARN_CONTAINER_RUNTIME_TYPE", "docker")
-        conf.set("spark.executorEnv.YARN_CONTAINER_RUNTIME_TYPE", "docker")
-        conf.set("spark.yarn.appMasterEnv.YARN_CONTAINER_RUNTIME_DOCKER_IMAGE", "quay.io/nvidia/spark:horovodtgravesspark3gpu")
-        conf.set("spark.executorEnv.YARN_CONTAINER_RUNTIME_DOCKER_IMAGE", "quay.io/nvidia/spark:horovodtgravesspark3gpu")
-        conf.set("spark.executor.instances", 2)
-        conf.set("spark.cores.max", 2)
-        conf.set("spark.executor.cores", 1)
-    elif args.num_proc:
-        conf.setMaster('local[{}]'.format(args.num_proc))
-    conf = set_gpu_conf(conf)
+    #if args.master:
+    #    conf.setMaster(args.master)
+    #    conf.set("spark.submit.deployMode", "cluster")
+    #    conf.set("spark.yarn.appMasterEnv.YARN_CONTAINER_RUNTIME_TYPE", "docker")
+    #    conf.set("spark.executorEnv.YARN_CONTAINER_RUNTIME_TYPE", "docker")
+    #    conf.set("spark.yarn.appMasterEnv.YARN_CONTAINER_RUNTIME_DOCKER_IMAGE", "quay.io/nvidia/spark:horovodtgravesspark3gpu")
+    #    conf.set("spark.executorEnv.YARN_CONTAINER_RUNTIME_DOCKER_IMAGE", "quay.io/nvidia/spark:horovodtgravesspark3gpu")
+    #    conf.set("spark.executor.instances", 2)
+    #    conf.set("spark.cores.max", 2)
+    ##    conf.set("spark.executor.cores", 1)
+    #elif args.num_proc:
+    #    conf.setMaster('local[{}]'.format(args.num_proc))
+    #conf = set_gpu_conf(conf)
     spark = SparkSession.builder.config(conf=conf).getOrCreate()
 
-    train_csv = spark.read.csv('%s/train.csv' % args.data_dir, header=True)
-    test_csv = spark.read.csv('%s/test.csv' % args.data_dir, header=True)
-
-    store_csv = spark.read.csv('%s/store.csv' % args.data_dir, header=True)
-    store_states_csv = spark.read.csv('%s/store_states.csv' % args.data_dir, header=True)
-    state_names_csv = spark.read.csv('%s/state_names.csv' % args.data_dir, header=True)
-    google_trend_csv = spark.read.csv('%s/googletrend.csv' % args.data_dir, header=True)
-    weather_csv = spark.read.csv('%s/weather.csv' % args.data_dir, header=True)
+    #train_csv = spark.read.csv('%s/train.csv' % args.data_dir, header=True)
+    #test_csv = spark.read.csv('%s/test.csv' % args.data_dir, header=True)
+#
+#    store_csv = spark.read.csv('%s/store.csv' % args.data_dir, header=True)
+#    store_states_csv = spark.read.csv('%s/store_states.csv' % args.data_dir, header=True)
+#    state_names_csv = spark.read.csv('%s/state_names.csv' % args.data_dir, header=True)
+#    google_trend_csv = spark.read.csv('%s/googletrend.csv' % args.data_dir, header=True)
+#    weather_csv = spark.read.csv('%s/weather.csv' % args.data_dir, header=True)
 
 
     def expand_date(df):
@@ -263,30 +263,30 @@ if __name__ == '__main__':
         test_csv = test_csv.sample(withReplacement=False, fraction=args.sample_rate)
 
     # Prepare data frames from CSV files.
-    train_df = prepare_df(train_csv).cache()
-    test_df = prepare_df(test_csv).cache()
+    #train_df = prepare_df(train_csv).cache()
+    #test_df = prepare_df(test_csv).cache()
 
     # Add elapsed times from holidays & promos, the data spanning training & test datasets.
-    elapsed_cols = ['Promo', 'StateHoliday', 'SchoolHoliday']
-    elapsed = add_elapsed(train_df.select('Date', 'Store', *elapsed_cols)
-                          .unionAll(test_df.select('Date', 'Store', *elapsed_cols)),
-                          elapsed_cols)
+    #elapsed_cols = ['Promo', 'StateHoliday', 'SchoolHoliday']
+    #elapsed = add_elapsed(train_df.select('Date', 'Store', *elapsed_cols)
+                          #.unionAll(test_df.select('Date', 'Store', *elapsed_cols)),
+                          #elapsed_cols)
 
     # Join with elapsed times.
-    train_df = train_df \
-        .join(elapsed, ['Date', 'Store']) \
-        .select(train_df['*'], *[prefix + col for prefix in ['Before', 'After'] for col in elapsed_cols])
-    test_df = test_df \
-        .join(elapsed, ['Date', 'Store']) \
-        .select(test_df['*'], *[prefix + col for prefix in ['Before', 'After'] for col in elapsed_cols])
+    #train_df = train_df \
+    #    .join(elapsed, ['Date', 'Store']) \
+    #    .select(train_df['*'], *[prefix + col for prefix in ['Before', 'After'] for col in elapsed_cols])
+    #test_df = test_df \
+    #    .join(elapsed, ['Date', 'Store']) \
+    #    .select(test_df['*'], *[prefix + col for prefix in ['Before', 'After'] for col in elapsed_cols])
 
     # Filter out zero sales.
-    train_df = train_df.filter(train_df.Sales > 0)
+    #train_df = train_df.filter(train_df.Sales > 0)
 
-    print('===================')
-    print('Prepared data frame')
-    print('===================')
-    train_df.show()
+    #print('===================')
+    #print('Prepared data frame')
+    #print('===================')
+    #train_df.show()
 
     categorical_cols = [
         'Store', 'State', 'DayOfWeek', 'Year', 'Month', 'Day', 'Week', 'CompetitionMonthsOpen', 'Promo2Weeks', 'StoreType',
@@ -303,8 +303,11 @@ if __name__ == '__main__':
     all_cols = categorical_cols + continuous_cols
 
     # Select features.
-    train_df = train_df.select(*(all_cols + ['Sales', 'Date'])).cache()
-    test_df = test_df.select(*(all_cols + ['Id', 'Date'])).cache()
+    #train_df = train_df.select(*(all_cols + ['Sales', 'Date'])).cache()
+    #test_df = test_df.select(*(all_cols + ['Id', 'Date'])).cache()
+
+    train_df = spark.read.parquet("/user/tgraves/tomtraindf.parquet")
+    test_df = spark.read.parquet("/user/tgraves/tomtestdf.parquet")
 
     # Build vocabulary of categorical columns.
     vocab = build_vocabulary(train_df.select(*categorical_cols)
@@ -412,6 +415,9 @@ if __name__ == '__main__':
 
     # Horovod: run training.
     store = Store.create(args.work_dir)
+    print("Tom before check exists")
+    res = store.exists("/user/tgraves") 
+    print("Tom before after check exists %s" % res)
     keras_estimator = hvd.KerasEstimator(num_proc=args.num_proc,
                                          store=store,
                                          model=model,

@@ -98,19 +98,19 @@ if __name__ == '__main__':
 
     # Create Spark session for data preparation.
     conf = SparkConf().setAppName('Keras Spark Rossmann Estimator Example').set('spark.sql.shuffle.partitions', '16')
-    if args.master:
-        conf.setMaster(args.master)
-        conf.set("spark.submit.deployMode", "cluster")
-        conf.set("spark.yarn.appMasterEnv.YARN_CONTAINER_RUNTIME_TYPE", "docker")
-        conf.set("spark.executorEnv.YARN_CONTAINER_RUNTIME_TYPE", "docker")
-        conf.set("spark.yarn.appMasterEnv.YARN_CONTAINER_RUNTIME_DOCKER_IMAGE", "quay.io/nvidia/spark:horovodtgravesspark3gpu")
-        conf.set("spark.executorEnv.YARN_CONTAINER_RUNTIME_DOCKER_IMAGE", "quay.io/nvidia/spark:horovodtgravesspark3gpu")
-        conf.set("spark.executor.instances", 2)
-        conf.set("spark.cores.max", 2)
-        conf.set("spark.executor.cores", 1)
-    elif args.num_proc:
-        conf.setMaster('local[{}]'.format(args.num_proc))
-    conf = set_gpu_conf(conf)
+    #if args.master:
+    #    conf.setMaster(args.master)
+    #    conf.set("spark.submit.deployMode", "cluster")
+    #    conf.set("spark.yarn.appMasterEnv.YARN_CONTAINER_RUNTIME_TYPE", "docker")
+    #    conf.set("spark.executorEnv.YARN_CONTAINER_RUNTIME_TYPE", "docker")
+    #    conf.set("spark.yarn.appMasterEnv.YARN_CONTAINER_RUNTIME_DOCKER_IMAGE", "quay.io/nvidia/spark:horovodtgravesspark3gpu")
+    #    conf.set("spark.executorEnv.YARN_CONTAINER_RUNTIME_DOCKER_IMAGE", "quay.io/nvidia/spark:horovodtgravesspark3gpu")
+    #    conf.set("spark.executor.instances", 2)
+    #    conf.set("spark.cores.max", 2)
+    ##    conf.set("spark.executor.cores", 1)
+    #elif args.num_proc:
+    #    conf.setMaster('local[{}]'.format(args.num_proc))
+    #conf = set_gpu_conf(conf)
     spark = SparkSession.builder.config(conf=conf).getOrCreate()
 
     train_csv = spark.read.csv('%s/train.csv' % args.data_dir, header=True)
@@ -305,6 +305,9 @@ if __name__ == '__main__':
     # Select features.
     train_df = train_df.select(*(all_cols + ['Sales', 'Date'])).cache()
     test_df = test_df.select(*(all_cols + ['Id', 'Date'])).cache()
+
+    train_df.write.mode("overwrite").parquet("tomtraindf.parquet")
+    test_df.write.mode("overwrite").parquet("tomtestdf.parquet")
 
     # Build vocabulary of categorical columns.
     vocab = build_vocabulary(train_df.select(*categorical_cols)

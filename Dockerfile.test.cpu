@@ -1,19 +1,19 @@
-ARG UBUNTU_VERSION=16.04
+ARG UBUNTU_VERSION=18.04
 FROM ubuntu:${UBUNTU_VERSION}
 
 # Arguments for the build. UBUNTU_VERSION needs to be repeated because
 # the first usage only applies to the FROM tag.
-ARG UBUNTU_VERSION=16.04
-ARG MPI_KIND=OpenMPI
-ARG PYTHON_VERSION=3.6
-ARG TENSORFLOW_PACKAGE=tensorflow==1.14.0
-ARG KERAS_PACKAGE=keras==2.2.4
-ARG PYTORCH_PACKAGE=torch==1.2.0+cpu
-ARG TORCHVISION_PACKAGE=torchvision==0.4.0+cpu
+ARG UBUNTU_VERSION=18.04
+ARG MPI_KIND=None
+ARG PYTHON_VERSION=3.8
+ARG TENSORFLOW_PACKAGE=tensorflow==2.2.0
+ARG KERAS_PACKAGE=keras==2.3.1
+ARG PYTORCH_PACKAGE=torch==1.5.0+cpu
+ARG TORCHVISION_PACKAGE=torchvision==0.5.0+cpu
 ARG MXNET_PACKAGE=mxnet==1.5.0
-ARG PYSPARK_PACKAGE=pyspark==2.4.0
+ARG PYSPARK_PACKAGE=pyspark==3.0.0.dev2
 # if SPARK_PACKAGE is set, installs pyspark from tgz archive
-ARG SPARK_PACKAGE=
+ARG SPARK_PACKAGE=spark-3.0.0-preview2/spark-3.0.0-preview2-bin-hadoop2.7.tgz
 
 # Set default shell to /bin/bash
 SHELL ["/bin/bash", "-cu"]
